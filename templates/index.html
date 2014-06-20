@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=utf-8 />
+<title>Plain Leaflet API</title>
+<meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+<script src='https://api.tiles.mapbox.com/mapbox.js/v1.6.4/mapbox.js'></script>
+<link href='https://api.tiles.mapbox.com/mapbox.js/v1.6.4/mapbox.css' rel='stylesheet' />
+<script src="static/js/leaflet.markercluster.js"></script>
+<link href="static/css/MarkerCluster.css" rel='stylesheet' />
+<link href="static/css/MarkerCluster.Default.css" rel='stylesheet' />
+
+<style>
+  body { margin:0; padding:0; }
+  #map { position:absolute; top:0; bottom:0; width:100%; }
+</style>
+</head>
+<body>
+<div id='map'></div>
+
+<script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+<script src="static/js/data.js"></script>
+<script src="static/js/data_nodes.js"></script>
+
+<script>
+//cria o mapa
+var mapboxTiles = L.tileLayer('https://{s}.tiles.mapbox.com/v3/elisamussumeci.ihdk0d7b/{z}/{x}/{y}.png', {
+    attribution: '<a href="http://www.mapbox.com/about/maps/" target="_blank">Terms &amp; Feedback</a>'
+});
+
+var map = L.map('map')
+    .addLayer(mapboxTiles)
+    .setView([42.3610, -71.0587], 15);
+
+// zoom inicial do mapa
+map.fitBounds([[49.445523, -126.570620],[24.816897, -65.017026]]);
+
+var startMarker = null;
+var endMarker = null;
+var path = null;
+var showingPath = null;
+
+// cria estrada
+var createLatLngs = function (currentRoad, options) {
+	var latLngs = [];
+	for (var i = currentRoad.length - 1; i >= 0; i--) {
+		var latlng = L.latLng(currentRoad[i].lat, currentRoad[i].lon);
+		latLngs.push(latlng);
+	}
+
+	var polyline = L.polyline(latLngs, options);
+	return polyline;
+}
+
+// plota todas as estradas 
+for (road in data) {
+	var currentRoad = data[road];
+	var line = createLatLngs(currentRoad, {color: 'gray', smoothFactor: 1, opacity: 0.8});
+	line.addTo(map);
+}
+
+// cria cluster de marcadores
+var markers = new L.MarkerClusterGroup();
+
+
+for (node in data_nodes) {
+	var currentNode = data_nodes[node];
+	var latlng = L.latLng(currentNode.latitude, currentNode.longitude);
+	// cria icone desmarcado(cinza)
+	var icon = L.mapbox.marker.icon({
+        'marker-color': '#bbb'
+    });
+    // cria icone marcado(vermelho)
+    var selectedIcon = L.mapbox.marker.icon({
+        'marker-color': '#f00'
+    });
+    // cria marcador
+	var marker = L.marker(latlng, {icon: icon})
+					// recebe na variavel ev o evento click
+				  .on('click', function (ev) {
+					ev.target.setIcon(selectedIcon);
+					// se ja foi feito um caminho, desmarco todos os marcadores e limpo o caminho
+					if (showingPath) {
+						startMarker.setIcon(icon);
+						endMarker.setIcon(icon);
+						startMarker = endMarker = null;
+						path.clearLayers();
+						path = null;
+						showingPath = null;
+					}
+					if (startMarker == null) {
+						startMarker = ev.target;
+					} else if (endMarker == null) {
+						endMarker = ev.target;
+						// pega o resultado do dijkstra quando passado a ele os marcadores marcados
+						$.ajax({
+							url: "/shortest/"+startMarker.node+"/"+endMarker.node,
+							contentType: "application/json; charset=utf-8"
+						}).done(function(shortest){
+							var tempArray = [];
+						 	for (var i = shortest.roads.length - 1; i >= 0; i--) {
+						 		// pinta o caminho entre os marcadores de vermelho
+						 		var currentRoad = data[shortest.roads[i]];
+						 		var line = createLatLngs(currentRoad, {color: 'red', smoothFactor: 2, opacity: 1});
+						 		tempArray.push(line);
+						 	}
+						 	path = L.layerGroup(tempArray).addTo(map);
+						 	showingPath = true;
+						});
+					}
+					});
+	// adiciona ao marker um atributo node que diz qual o numero do vertice
+	// para quando clicarmos no marcador sabermos qual o vertice
+	marker["node"] = node;
+	markers.addLayer(marker);
+}
+
+map.addLayer(markers);
+
+
+
+
+
+
+
+
+
+
+</script>
+</body>
+</html>
